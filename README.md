@@ -1,27 +1,17 @@
-BBox\_with\_angle-Label-Tool
+RotatedRect\-Image\-Labeler
 ===============
 
 A simple tool for labeling object bounding boxes in images, implemented with Python Tkinter.
 
-Data Organization
------------------
->LabelTool  
->|  
->|--main.py   *# source code for the tool*  
->|  
->|--Images/   *# direcotry containing the images to be labeled*  
->|  
->|--Labels/   *# direcotry for the labeling results*  
-
 Dependency
 ----------
-- python 2.7 
-- PIL-1.1.7.win32-py2.7
+- python 3.5
+- Pillow - 4.2.1
 
 Startup
 -------
 ```
-$ python main.py
+$ python -m main
 ```
 
 Usages
