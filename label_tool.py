@@ -132,17 +132,17 @@ class LabelTool:
         print('%d images loaded from %s' % (self.total, s))
 
     # get the rectangle's four corners
-    @staticmethod
-    def get_rect_corner(xc, yc, x0, y0):
-        w = abs(x0 - xc) * 2
-        h = abs(y0 - yc) * 2
-        x2 = 2 * xc - x0
-        y2 = 2 * yc - y0
-        x0, x2 = max(x0, x2), min(x0, x2)
-        y0, y2 = max(y0, y2), min(y0, y2)
-        corner_x = x0, x0, x2, x2
-        corner_y = y0, y2, y2, y0
-        return zip(corner_x, corner_y), w, h
+    def get_rect(self, x0, y0, x1, y1, x2, y2):
+        w = m.sqrt(((x0 - x1) ** 2) + ((y0 - y1) ** 2))
+        h = m.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+        m1 = self.slope(x1, y1, x2, y2)
+        m2 = self.slope(x0, y0, x1, y1)
+
+        x3 = ((y0 - m1 * x0) - (y2 - m2 * x2)) / -(m1 - m2)
+        y3 = m1 * x3 + (y0 - m1 * x0)
+        corner_x = x0, x1, x2, x3
+        corner_y = y0, y1, y2, y3
+        return tuple(zip(corner_x, corner_y)), w, h
 
     def load_image(self):
         # load image
@@ -198,11 +198,11 @@ class LabelTool:
                 f.write(' '.join(map(str, bbox)) + '\n')
         print('Image No. %d saved' % self.cur)
 
-    def complex_unit(self, event):
-        dx = self.mainPanel.canvasx(event.x) - self.STATE['x']
-        dy = self.mainPanel.canvasy(event.y) - self.STATE['y']
+    def slope(self, x0, y0, x1, y1):
+        dx = x1 - x0
+        dy = y1 - y0
         try:
-            return complex(dx, dy) / abs(complex(dx, dy))
+            return dy / dx
         except ZeroDivisionError:
             return 0.0  # cannot determine angle
 
@@ -210,17 +210,16 @@ class LabelTool:
         # print "click state:{}".format(self.STATE['click'])
 
         if self.STATE['click'] == 0:
-            self.STATE['x'], self.STATE['y'] = event.x, event.y
+            self.STATE['x0'], self.STATE['y0'] = event.x, event.y
 
         elif self.STATE['click'] == 1:
-            xc, x0 = self.STATE['x'], event.x
-            yc, y0 = self.STATE['y'], event.y
-            self.STATE['gR'] = list(self.get_rect_corner(xc, yc, x0, y0))
-            # print "Rectangle corner:",self.STATE['gR'][0]
-            global start
-            start = self.complex_unit(event)
+            self.STATE['x1'], self.STATE['y1'] = event.x, event.y
 
         elif self.STATE['click'] == 2:
+            x0, x1, x2 = self.STATE['x0'], self.STATE['x1'], event.x
+            y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
+            self.STATE['gR'] = list(self.get_rect(x0, y0, x1, y1, x2, y2))
+            # print "Rectangle corner:",self.STATE['gR'][0]
             self.bboxList.append(
                 (self.STATE['x'], self.STATE['y'], self.STATE['gR'][1], self.STATE['gR'][2], self.STATE['gR_deg']))
             self.bboxIdList.append(self.bboxId)
@@ -231,7 +230,7 @@ class LabelTool:
             self.listbox.itemconfig(len(self.bboxIdList) - 1, fg=COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
             self.STATE['click'] = -1
 
-        self.STATE['click'] = 1 + self.STATE['click']
+        self.STATE['click'] += 1
 
     def mouse_move(self, event):
         self.disp.config(text='x: %d, y: %d' % (event.x, event.y))
@@ -246,28 +245,29 @@ class LabelTool:
         if 1 == self.STATE['click']:
             if self.bboxId:
                 self.mainPanel.delete(self.bboxId)
-            xc, x0 = self.STATE['x'], event.x
-            yc, y0 = self.STATE['y'], event.y
-            self.STATE['gR'] = list(self.get_rect_corner(xc, yc, x0, y0))
+            x0, x1 = self.STATE['x0'], event.x
+            y0, y1 = self.STATE['y0'], event.y
+
             # print self.STATE['gR']
+            self.bboxId = self.mainPanel.create_line(x0, y0, x1, y1, width=2,
+                                                     fill=COLORS[len(self.bboxList) % len(COLORS)])
+
+        if 2 == self.STATE['click']:
+            if self.bboxId:
+                self.mainPanel.delete(self.bboxId)
+
+            x0, x1, x2 = self.STATE['x0'], self.STATE['x1'], event.x
+            y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
+            global start
+            angle = np.rad2deg(np.arctan2(y1 - y0, x1 - x0))
+            self.STATE['gR'] = list(self.get_rect(x0, y0, x1, y1, x2, y2))
             self.bboxId = self.mainPanel.create_polygon(self.STATE['gR'][0],
                                                         width=2,
                                                         outline=COLORS[len(self.bboxList) % len(COLORS)],
                                                         fill='')
-        if 2 == self.STATE['click']:
-            xc, xn = self.STATE['x'], event.x
-            yc, yn = self.STATE['y'], event.y
-            global start
-            angle = self.complex_unit(event) / start
-            offset = complex(xc, yc)
-            newxy = []
-            for x, y in self.STATE['gR'][0]:
-                v = angle * (complex(x, y) - offset) + offset
-                newxy.append(v.real)
-                newxy.append(v.imag)
             # print np.angle(angle,deg=True)
             self.STATE['gR_deg'] = np.angle(angle, deg=True)
-            self.mainPanel.coords(self.bboxId, *newxy)
+
 
     def cancel_bbox(self, event):
         if 1 == self.STATE['click']:
