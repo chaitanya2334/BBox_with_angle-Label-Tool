@@ -1,10 +1,13 @@
 import tkinter as tk
+from tkinter.filedialog import askdirectory
+
 from PIL import Image, ImageTk
 import os
 import glob
 import math as m
 import cmath as cm
 import numpy as np
+import re
 
 # colors for the bounding boxes
 COLORS = ['red', 'blue', 'yellow', 'pink', 'cyan', 'green', 'black']
@@ -45,12 +48,21 @@ class LabelTool:
 
         # ----------------- GUI stuff ---------------------
         # dir entry & load
-        self.label = tk.Label(self.frame, text="Image Dir:")
-        self.label.grid(row=0, column=0, sticky=tk.E)
-        self.entry = tk.Entry(self.frame)
-        self.entry.grid(row=0, column=1, sticky=tk.W + tk.E)
-        self.ldBtn = tk.Button(self.frame, text="Load", command=self.load_dir)
-        self.ldBtn.grid(row=0, column=2, sticky=tk.W + tk.E)
+        self.in_label = tk.Label(self.frame, text="Image Dir:")
+        self.in_label.grid(row=0, column=0, sticky=tk.E)
+        self.in_entry = tk.Entry(self.frame)
+        self.in_entry.grid(row=0, column=1, sticky=tk.W + tk.E)
+        self.in_ldBtn = tk.Button(self.frame, text="Browse", command=self.load_img_dir)
+        self.in_ldBtn.grid(row=0, column=2, sticky=tk.W + tk.E)
+
+        # dir entry & load
+        self.out_label = tk.Label(self.frame, text="Label Dir:")
+        self.out_label.grid(row=1, column=0, sticky=tk.E)
+        self.out_entry = tk.Entry(self.frame)
+        self.out_entry.grid(row=1, column=1, sticky=tk.W + tk.E)
+        self.out_ldBtn = tk.Button(self.frame, text="Browse", command=self.load_out_dir)
+        self.out_ldBtn.grid(row=1, column=2, sticky=tk.W + tk.E)
+
 
         # main panel for labeling
         self.mainPanel = tk.Canvas(self.frame, cursor='tcross')
@@ -61,21 +73,21 @@ class LabelTool:
         self.parent.bind("<Prior>", self.prev_image)  # press <up> to go backforward
         self.parent.bind("<Next>", self.next_image)  # press <down> to go forward
         # self.parent.bind("<Home>",self.loadDir)        # press <Enter> to load dir
-        self.mainPanel.grid(row=1, column=1, rowspan=4, sticky=tk.W + tk.N)
+        self.mainPanel.grid(row=2, column=1, rowspan=4, sticky=tk.W + tk.N)
 
         # showing bbox info & delete bbox
         self.lb1 = tk.Label(self.frame, text='Bounding boxes:')
-        self.lb1.grid(row=1, column=2, sticky=tk.W + tk.N)
-        self.listbox = tk.Listbox(self.frame, width=28, height=12)
-        self.listbox.grid(row=2, column=2, sticky=tk.N)
+        self.lb1.grid(row=2, column=2, sticky=tk.W + tk.N)
+        self.listbox = tk.Listbox(self.frame, width=38, height=12)
+        self.listbox.grid(row=3, column=2, sticky=tk.N)
         self.btnDel = tk.Button(self.frame, text='Delete', command=self.del_bbox)
-        self.btnDel.grid(row=3, column=2, sticky=tk.W + tk.E + tk.N)
+        self.btnDel.grid(row=4, column=2, sticky=tk.W + tk.E + tk.N)
         self.btnClear = tk.Button(self.frame, text='ClearAll', command=self.clear_bbox)
-        self.btnClear.grid(row=4, column=2, sticky=tk.W + tk.E + tk.N)
+        self.btnClear.grid(row=5, column=2, sticky=tk.W + tk.E + tk.N)
 
         # control panel for image navigation
         self.ctrPanel = tk.Frame(self.frame)
-        self.ctrPanel.grid(row=5, column=1, columnspan=2, sticky=tk.W + tk.E)
+        self.ctrPanel.grid(row=6, column=1, columnspan=2, sticky=tk.W + tk.E)
         self.prevBtn = tk.Button(self.ctrPanel, text='<< Prev', width=10, command=self.prev_image)
         self.prevBtn.pack(side=tk.LEFT, padx=5, pady=3)
         self.nextBtn = tk.Button(self.ctrPanel, text='Next >>', width=10, command=self.next_image)
@@ -91,7 +103,7 @@ class LabelTool:
 
         # example pannel for illustration
         self.egPanel = tk.Frame(self.frame, border=10)
-        self.egPanel.grid(row=1, column=0, rowspan=5, sticky=tk.N)
+        self.egPanel.grid(row=2, column=0, rowspan=5, sticky=tk.N)
         self.tmpLabel2 = tk.Label(self.egPanel, text="")
         self.tmpLabel2.pack(side=tk.TOP, pady=5)
         self.egLabels = []
@@ -106,50 +118,88 @@ class LabelTool:
         self.frame.columnconfigure(1, weight=1)
         self.frame.rowconfigure(4, weight=1)
 
-    def load_dir(self, dbg=False):
+    def load_img_dir(self, dbg=False):
         if not dbg:
-            s = self.entry.get()
+
+            tk.Tk().withdraw()
+            s = askdirectory()
+            self.in_entry.insert(0, s)
+            s = self.in_entry.get()
             self.parent.focus()
             self.category = str(s)
         else:
             s = r'D:\workspace\python\labelGUI'
 
         # get image list
-        self.imageDir = os.path.join(r'./Images', self.category)
+        self.imageDir = s
+
+        def atoi(text):
+            return int(text) if text.isdigit() else text
+
+        def natural_keys(text):
+            return [atoi(c) for c in re.split('(\d+)', text)]
+
         self.imageList = glob.glob(os.path.join(self.imageDir, '*.png'))
+        self.imageList.extend(glob.glob(os.path.join(self.imageDir, '*.jpg')))
+        self.imageList.sort(key=natural_keys)
         if len(self.imageList) == 0:
             print('No .png images found in the specified dir!')
             return
         # default to the 1st image in the collection
         self.cur = 1
         self.total = len(self.imageList)
-
-        # set up output dir
-        self.outDir = os.path.join(r'./Labels', self.category)
-        if not os.path.exists(self.outDir):
-            os.mkdir(self.outDir)
         self.load_image()
         print('%d images loaded from %s' % (self.total, s))
 
+    def load_out_dir(self, dbg=False):
+        if not dbg:
+            tk.Tk().withdraw()
+            s = askdirectory()
+            self.out_entry.insert(0, s)
+            s = self.out_entry.get()
+            self.parent.focus()
+            self.outDir = str(s)
+        else:
+            s = r'D:\workspace\python\labelGUI'
+        # set up output dir
+        print("label file loading from this dir: {0}".format(self.outDir))
+        if not os.path.exists(self.outDir):
+            os.mkdir(self.outDir)
+
+
+
     # get the rectangle's four corners
     def get_rect(self, x0, y0, x1, y1, x2, y2):
+
         w = m.sqrt(((x0 - x1) ** 2) + ((y0 - y1) ** 2))
-        h = m.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+        h = m.sqrt(((x1 - x2) ** 2) + ((y1 - y2) ** 2))
         m1 = self.slope(x1, y1, x2, y2)
         m2 = self.slope(x0, y0, x1, y1)
+        if m1 == np.inf:
+            x3 = x0
+        elif m2 == np.inf:
+            x3 = x2
+        else:
+            x3 = ((y0 - m1 * x0) - (y2 - m2 * x2)) / -(m1 - m2)
 
-        x3 = ((y0 - m1 * x0) - (y2 - m2 * x2)) / -(m1 - m2)
-        y3 = m1 * x3 + (y0 - m1 * x0)
-        corner_x = x0, x1, x2, x3
-        corner_y = y0, y1, y2, y3
+        if m1 == np.inf:
+            y3 = m2 * x3 + (y2 - m2 * x2)
+        else:
+            y3 = m1 * x3 + (y0 - m1 * x0)
+        print(m1)
+        print(m2)
+        corner_x = (x0 / 2, x1 / 2, x2 / 2, int(x3 / 2))
+        corner_y = (y0 / 2, y1 / 2, y2 / 2, int(y3 / 2))
         return tuple(zip(corner_x, corner_y)), w, h
 
     def load_image(self):
         # load image
         imagepath = self.imageList[self.cur - 1]
         img = Image.open(imagepath)
+        width, height = img.size
+        img = img.resize((int(width / 2), int(height / 2)), Image.ANTIALIAS)
         self.tkimg = ImageTk.PhotoImage(img)
-        self.mainPanel.config(width=max(self.tkimg.width(), 400), height=max(self.tkimg.height(), 400))
+        self.mainPanel.config(width=max(self.tkimg.width(), 100), height=max(self.tkimg.height(), 100))
         self.mainPanel.create_image(0, 0, image=self.tkimg, anchor=tk.NW)
         self.progLabel.config(text="%04d/%04d" % (self.cur, self.total))
 
@@ -157,7 +207,9 @@ class LabelTool:
         self.clear_bbox()
         self.image_name = os.path.split(imagepath)[-1].split('.')[0]
         label_name = self.image_name + '.txt'
+        print(self.outDir)
         self.label_filename = os.path.join(self.outDir, label_name)
+        print(self.label_filename)
         bbox_cnt = 0
         if os.path.exists(self.label_filename):
             with open(self.label_filename) as f:
@@ -166,32 +218,24 @@ class LabelTool:
                         bbox_cnt = int(line.strip())
                         continue
                     tmp = [float(t.strip()) for t in line.split()]
+                    print(tmp)
                     # print tmp
                     self.bboxList.append(tuple(tmp))
-                    xc, yc = tmp[0], tmp[1]
-                    x0, y0 = xc + tmp[2] / 2, yc + tmp[3] / 2
-                    poly_tmp = list(self.get_rect_corner(xc, yc, x0, y0))
-                    tmp_id = self.mainPanel.create_polygon(poly_tmp[0],
+
+                    poly_tmp = list(tmp)
+                    tmp_id = self.mainPanel.create_polygon(poly_tmp,
                                                            width=2,
                                                            outline=COLORS[(len(self.bboxList) - 1) % len(COLORS)],
                                                            fill='')
-                    angle = cm.exp(m.radians(tmp[4]) * 1j)
-                    offset = complex(xc, yc)
-                    new_xy = []
-                    for x, y in poly_tmp[0]:
-                        v = angle * (complex(x, y) - offset) + offset
-                        new_xy.append(v.real)
-                        new_xy.append(v.imag)
                     # print np.angle(angle,deg=True)
-                    self.mainPanel.coords(tmp_id, *new_xy)
-
                     self.bboxIdList.append(tmp_id)
                     self.listbox.insert(tk.END,
-                                        '(%d, %d), w:%d, h:%d, deg:%.2f' % (tmp[0], tmp[1], tmp[2], tmp[3], tmp[4]))
+                                        '({}, {}),({}, {}),({}, {}),({}, {})'.format(*tmp))
                     self.listbox.itemconfig(len(self.bboxIdList) - 1,
                                             fg=COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
 
     def save_image(self):
+        print(self.label_filename)
         with open(self.label_filename, 'w') as f:
             f.write('%d\n' % len(self.bboxList))
             for bbox in self.bboxList:
@@ -204,7 +248,7 @@ class LabelTool:
         try:
             return dy / dx
         except ZeroDivisionError:
-            return 0.0  # cannot determine angle
+            return np.inf  # cannot determine angle
 
     def mouse_click(self, event):
         # print "click state:{}".format(self.STATE['click'])
@@ -218,15 +262,15 @@ class LabelTool:
         elif self.STATE['click'] == 2:
             x0, x1, x2 = self.STATE['x0'], self.STATE['x1'], event.x
             y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
-            self.STATE['gR'] = list(self.get_rect(x0, y0, x1, y1, x2, y2))
+            self.STATE['gR'] = list(self.get_rect(2 * x0, 2 * y0, 2 * x1, 2 * y1, 2 * x2, 2 * y2))
             # print "Rectangle corner:",self.STATE['gR'][0]
             self.bboxList.append(
-                (self.STATE['x'], self.STATE['y'], self.STATE['gR'][1], self.STATE['gR'][2], self.STATE['gR_deg']))
+                [int(element) for tupl in self.STATE['gR'][0] for element in tupl])
             self.bboxIdList.append(self.bboxId)
             self.bboxId = None
-            self.listbox.insert(tk.END, '(%d, %d), w:%d, h:%d, deg:%.2f' % (self.STATE['x'], self.STATE['y'],
-                                                                            self.STATE['gR'][1], self.STATE['gR'][2],
-                                                                            self.STATE['gR_deg']))
+            print(self.STATE['gR'])
+            self.listbox.insert(tk.END, '({}, {}),({}, {}),({}, {}),({}, {})'.format(
+                *[int(element) for tupl in self.STATE['gR'][0] for element in tupl]))
             self.listbox.itemconfig(len(self.bboxIdList) - 1, fg=COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
             self.STATE['click'] = -1
 
@@ -260,14 +304,13 @@ class LabelTool:
             y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
             global start
             angle = np.rad2deg(np.arctan2(y1 - y0, x1 - x0))
-            self.STATE['gR'] = list(self.get_rect(x0, y0, x1, y1, x2, y2))
+            self.STATE['gR'] = list(self.get_rect(2 * x0, 2 * y0, 2 * x1, 2 * y1, 2 * x2, 2 * y2))
             self.bboxId = self.mainPanel.create_polygon(self.STATE['gR'][0],
                                                         width=2,
                                                         outline=COLORS[len(self.bboxList) % len(COLORS)],
                                                         fill='')
             # print np.angle(angle,deg=True)
             self.STATE['gR_deg'] = np.angle(angle, deg=True)
-
 
     def cancel_bbox(self, event):
         if 1 == self.STATE['click']:
