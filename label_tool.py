@@ -186,8 +186,6 @@ class LabelTool:
             y3 = m2 * x3 + (y2 - m2 * x2)
         else:
             y3 = m1 * x3 + (y0 - m1 * x0)
-        print(m1)
-        print(m2)
         corner_x = (x0 / 2, x1 / 2, x2 / 2, int(x3 / 2))
         corner_y = (y0 / 2, y1 / 2, y2 / 2, int(y3 / 2))
         return tuple(zip(corner_x, corner_y)), w, h
