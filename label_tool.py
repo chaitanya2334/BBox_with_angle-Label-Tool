@@ -148,7 +148,6 @@ class LabelTool:
         # default to the 1st image in the collection
         self.cur = 1
         self.total = len(self.imageList)
-        self.load_image()
         print('%d images loaded from %s' % (self.total, s))
 
     def load_out_dir(self, dbg=False):
@@ -165,6 +164,8 @@ class LabelTool:
         print("label file loading from this dir: {0}".format(self.outDir))
         if not os.path.exists(self.outDir):
             os.mkdir(self.outDir)
+
+        self.load_image()
 
 
 
