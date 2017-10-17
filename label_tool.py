@@ -206,9 +206,9 @@ class LabelTool:
         self.clear_bbox()
         self.image_name = os.path.split(imagepath)[-1].split('.')[0]
         label_name = self.image_name + '.txt'
-        print(self.outDir)
+        print("label directory:" + self.outDir)
         self.label_filename = os.path.join(self.outDir, label_name)
-        print(self.label_filename)
+        print("label save path:" + self.label_filename)
         bbox_cnt = 0
         if os.path.exists(self.label_filename):
             with open(self.label_filename) as f:
@@ -217,7 +217,6 @@ class LabelTool:
                         bbox_cnt = int(line.strip())
                         continue
                     tmp = [float(t.strip()) for t in line.split()]
-                    print(tmp)
                     # print tmp
                     self.bboxList.append(tuple(tmp))
 
@@ -234,7 +233,7 @@ class LabelTool:
                                             fg=COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
 
     def save_image(self):
-        print(self.label_filename)
+        print("saving image in:" + self.label_filename)
         with open(self.label_filename, 'w') as f:
             f.write('%d\n' % len(self.bboxList))
             for bbox in self.bboxList:
@@ -267,7 +266,6 @@ class LabelTool:
                 [int(element) for tupl in self.STATE['gR'][0] for element in tupl])
             self.bboxIdList.append(self.bboxId)
             self.bboxId = None
-            print(self.STATE['gR'])
             self.listbox.insert(tk.END, '({}, {}),({}, {}),({}, {}),({}, {})'.format(
                 *[int(element) for tupl in self.STATE['gR'][0] for element in tupl]))
             self.listbox.itemconfig(len(self.bboxIdList) - 1, fg=COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
