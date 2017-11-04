@@ -358,3 +358,4 @@ class LabelTool:
             self.save_image()
             self.cur = [i for i, s in enumerate(self.imageList) if filename in s][0] + 1
             self.load_image()
+            self.parent.focus()
