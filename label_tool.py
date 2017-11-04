@@ -66,12 +66,14 @@ class LabelTool:
 
         # main panel for labeling
         self.mainPanel = tk.Canvas(self.frame, cursor='tcross')
+        self.mainPanel.bind("z", lambda event: self.mainPanel.focus_set())
         self.mainPanel.bind("<Button-1>", self.mouse_click)
         self.mainPanel.bind("<Motion>", self.mouse_move)
-        self.parent.bind("<Escape>", self.cancel_bbox)  # press <Espace> to cancel current bbox
+        self.parent.bind_all("<Escape>", self.cancel_bbox)  # press <Espace> to cancel current bbox
         self.parent.bind("<Delete>", self.del_bbox)  # press <Delete> to cancel the selection
-        self.parent.bind("<Prior>", self.prev_image)  # press <up> to go backforward
-        self.parent.bind("<Next>", self.next_image)  # press <down> to go forward
+        self.parent.bind("a", self.prev_image)  # press <up> to go backforward
+        self.parent.bind("d", self.next_image)  # press <down> to go forward
+
         # self.parent.bind("<Home>",self.loadDir)        # press <Enter> to load dir
         self.mainPanel.grid(row=2, column=1, rowspan=4, sticky=tk.W + tk.N)
 
@@ -94,10 +96,11 @@ class LabelTool:
         self.nextBtn.pack(side=tk.LEFT, padx=5, pady=3)
         self.progLabel = tk.Label(self.ctrPanel, text="Progress:     /    ")
         self.progLabel.pack(side=tk.LEFT, padx=5)
-        self.tmpLabel = tk.Label(self.ctrPanel, text="Go to Image No.")
+        self.tmpLabel = tk.Label(self.ctrPanel, text="Go to Image filename")
         self.tmpLabel.pack(side=tk.LEFT, padx=5)
         self.idxEntry = tk.Entry(self.ctrPanel, width=5)
         self.idxEntry.pack(side=tk.LEFT)
+        self.idxEntry.bind('<FocusOut>', lambda e: self.idxEntry.select_clear())
         self.goBtn = tk.Button(self.ctrPanel, text='Go', command=self.goto_image)
         self.goBtn.pack(side=tk.LEFT)
 
@@ -200,7 +203,8 @@ class LabelTool:
         self.tkimg = ImageTk.PhotoImage(img)
         self.mainPanel.config(width=max(self.tkimg.width(), 100), height=max(self.tkimg.height(), 100))
         self.mainPanel.create_image(0, 0, image=self.tkimg, anchor=tk.NW)
-        self.progLabel.config(text="%04d/%04d" % (self.cur, self.total))
+        self.progLabel.config(text="{0}/{1}".format(os.path.basename(self.imageList[self.cur-1]),
+                                                    os.path.basename(self.imageList[self.total-1])))
 
         # load labels
         self.clear_bbox()
@@ -348,8 +352,9 @@ class LabelTool:
             self.load_image()
 
     def goto_image(self):
-        idx = int(self.idxEntry.get())
-        if 1 <= idx <= self.total:
+        filename = self.idxEntry.get()
+        print(self.imageList[0])
+        if any(filename in s for s in self.imageList):
             self.save_image()
-            self.cur = idx
+            self.cur = [i for i, s in enumerate(self.imageList) if filename in s][0] + 1
             self.load_image()
