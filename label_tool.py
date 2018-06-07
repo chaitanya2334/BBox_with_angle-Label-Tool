@@ -63,7 +63,6 @@ class LabelTool:
         self.out_ldBtn = tk.Button(self.frame, text="Browse", command=self.load_out_dir)
         self.out_ldBtn.grid(row=1, column=2, sticky=tk.W + tk.E)
 
-
         # main panel for labeling
         self.mainPanel = tk.Canvas(self.frame, cursor='tcross')
         self.mainPanel.bind("z", lambda event: self.mainPanel.focus_set())
@@ -170,8 +169,6 @@ class LabelTool:
 
         self.load_image()
 
-
-
     # get the rectangle's four corners
     def get_rect(self, x0, y0, x1, y1, x2, y2):
 
@@ -194,6 +191,18 @@ class LabelTool:
         corner_y = (y0 / 2, y1 / 2, y2 / 2, int(y3 / 2))
         return tuple(zip(corner_x, corner_y)), w, h
 
+    # get the circle's four corners
+    # first two points define diameter, third one shifts in any direction
+    def get_circ(self, x0, y0, x1, y1, x2, y2):
+        r = m.sqrt(((x0 - x1) ** 2) + ((y0 - y1) ** 2)) / 2
+        center_x = (x0 + x1) / 2 + (x2 - x1)
+        center_y = (y0 + y1) / 2 + (y2 - y1)
+        return ((int((center_x - r) / 2), int((center_y - r) / 2)),
+                (int((center_x - r) / 2), int((center_y + r) / 2)),
+                (int((center_x + r) / 2), int((center_y + r) / 2)),
+                (int((center_x + r) / 2), int((center_y - r) / 2))),\
+            r * 2, r * 2
+
     def load_image(self):
         # load image
         imagepath = self.imageList[self.cur - 1]
@@ -203,8 +212,8 @@ class LabelTool:
         self.tkimg = ImageTk.PhotoImage(img)
         self.mainPanel.config(width=max(self.tkimg.width(), 100), height=max(self.tkimg.height(), 100))
         self.mainPanel.create_image(0, 0, image=self.tkimg, anchor=tk.NW)
-        self.progLabel.config(text="{0}/{1}".format(os.path.basename(self.imageList[self.cur-1]),
-                                                    os.path.basename(self.imageList[self.total-1])))
+        self.progLabel.config(text="{0}/{1}".format(os.path.basename(self.imageList[self.cur - 1]),
+                                                    os.path.basename(self.imageList[self.total - 1])))
 
         # load labels
         self.clear_bbox()
@@ -225,10 +234,10 @@ class LabelTool:
                     self.bboxList.append(tuple(tmp))
 
                     poly_tmp = list(tmp)
-                    tmp_id = self.mainPanel.create_polygon(poly_tmp,
-                                                           width=2,
-                                                           outline=COLORS[(len(self.bboxList) - 1) % len(COLORS)],
-                                                           fill='')
+                    tmp_id = self.mainPanel.create_oval(poly_tmp[0], poly_tmp[1], poly_tmp[4], poly_tmp[5],
+                                                        width=2,
+                                                        outline=COLORS[(len(self.bboxList) - 1) % len(COLORS)],
+                                                        fill='')
                     # print np.angle(angle,deg=True)
                     self.bboxIdList.append(tmp_id)
                     self.listbox.insert(tk.END,
@@ -264,7 +273,7 @@ class LabelTool:
         elif self.STATE['click'] == 2:
             x0, x1, x2 = self.STATE['x0'], self.STATE['x1'], event.x
             y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
-            self.STATE['gR'] = list(self.get_rect(2 * x0, 2 * y0, 2 * x1, 2 * y1, 2 * x2, 2 * y2))
+            self.STATE['gR'] = list(self.get_circ(2 * x0, 2 * y0, 2 * x1, 2 * y1, 2 * x2, 2 * y2))
             # print "Rectangle corner:",self.STATE['gR'][0]
             self.bboxList.append(
                 [int(element) for tupl in self.STATE['gR'][0] for element in tupl])
@@ -294,8 +303,11 @@ class LabelTool:
             y0, y1 = self.STATE['y0'], event.y
 
             # print self.STATE['gR']
-            self.bboxId = self.mainPanel.create_line(x0, y0, x1, y1, width=2,
-                                                     fill=COLORS[len(self.bboxList) % len(COLORS)])
+            circ = list(self.get_circ(x0 * 2, y0 * 2, x1 * 2, y1 * 2, x1 * 2, y1 * 2))
+            self.bboxId = self.mainPanel.create_oval(circ[0][0], circ[0][2],
+                                                     width=2,
+                                                     outline=COLORS[len(self.bboxList) % len(COLORS)],
+                                                     fill='')
 
         if 2 == self.STATE['click']:
             if self.bboxId:
@@ -305,11 +317,11 @@ class LabelTool:
             y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
             global start
             angle = np.rad2deg(np.arctan2(y1 - y0, x1 - x0))
-            self.STATE['gR'] = list(self.get_rect(2 * x0, 2 * y0, 2 * x1, 2 * y1, 2 * x2, 2 * y2))
-            self.bboxId = self.mainPanel.create_polygon(self.STATE['gR'][0],
-                                                        width=2,
-                                                        outline=COLORS[len(self.bboxList) % len(COLORS)],
-                                                        fill='')
+            self.STATE['gR'] = list(self.get_circ(x0 * 2, y0 * 2, x1 * 2, y1 * 2, x2 * 2, y2 * 2))
+            self.bboxId = self.mainPanel.create_oval(self.STATE['gR'][0][0], self.STATE['gR'][0][2],
+                                                     width=2,
+                                                     outline=COLORS[len(self.bboxList) % len(COLORS)],
+                                                     fill='')
             # print np.angle(angle,deg=True)
             self.STATE['gR_deg'] = np.angle(angle, deg=True)
 
