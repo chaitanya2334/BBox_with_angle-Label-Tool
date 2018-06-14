@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter.filedialog import askdirectory
 
 from PIL import Image, ImageTk
+import shape
 import os
 import glob
 import math as m
@@ -11,6 +12,8 @@ import re
 
 # colors for the bounding boxes
 COLORS = ['red', 'blue', 'yellow', 'pink', 'cyan', 'green', 'black']
+# shape options for annotations
+SHAPE_TYPES = ['Polygon', 'Circle']
 # image sizes for the examples
 SIZE = 480, 640
 
@@ -38,11 +41,16 @@ class LabelTool:
         self.tkimg = None
 
         # initialize mouse state
-        self.STATE = {'click': 0, 'x': 0, 'y': 0, 'gR': [], 'gR_deg': 0}
-        # reference to bbox
-        self.bboxIdList = []
-        self.bboxId = None
-        self.bboxList = []
+        # self.STATE = {'click': 0, 'x': 0, 'y': 0, 'gR': [], 'gR_deg': 0}
+        #         # # reference to bbox
+        #         # self.bboxIdList = []
+        #         # self.bboxId = None
+        #         # self.bboxList = []
+        self.shapeIdList = []
+        self.shapeId = None
+        self.shapeList = []
+        self.shape = None
+        self.selected_shape_idx = -1
         self.hl = None
         self.vl = None
 
@@ -68,23 +76,31 @@ class LabelTool:
         self.mainPanel.bind("z", lambda event: self.mainPanel.focus_set())
         self.mainPanel.bind("<Button-1>", self.mouse_click)
         self.mainPanel.bind("<Motion>", self.mouse_move)
-        self.parent.bind_all("<Escape>", self.cancel_bbox)  # press <Espace> to cancel current bbox
-        self.parent.bind("<Delete>", self.del_bbox)  # press <Delete> to cancel the selection
+        self.parent.bind_all("<Escape>", self.cancel_shape)  # press <Espace> to cancel current bbox
+        self.parent.bind("<Delete>", self.del_shape)  # press <Delete> to cancel the selection
         self.parent.bind("a", self.prev_image)  # press <up> to go backforward
         self.parent.bind("d", self.next_image)  # press <down> to go forward
 
         # self.parent.bind("<Home>",self.loadDir)        # press <Enter> to load dir
         self.mainPanel.grid(row=2, column=1, rowspan=4, sticky=tk.W + tk.N)
 
-        # showing bbox info & delete bbox
-        self.lb1 = tk.Label(self.frame, text='Bounding boxes:')
+        # showing shape info & delete bbox
+        self.lb1 = tk.Label(self.frame, text='Bounding Shapes:')
         self.lb1.grid(row=2, column=2, sticky=tk.W + tk.N)
         self.listbox = tk.Listbox(self.frame, width=38, height=12)
         self.listbox.grid(row=3, column=2, sticky=tk.N)
-        self.btnDel = tk.Button(self.frame, text='Delete', command=self.del_bbox)
+        self.btnDel = tk.Button(self.frame, text='Delete', command=self.del_shape)
         self.btnDel.grid(row=4, column=2, sticky=tk.W + tk.E + tk.N)
-        self.btnClear = tk.Button(self.frame, text='ClearAll', command=self.clear_bbox)
+        self.btnClear = tk.Button(self.frame, text='ClearAll', command=self.clear_shape)
         self.btnClear.grid(row=5, column=2, sticky=tk.W + tk.E + tk.N)
+
+        # toggling between shape types
+        self.shape_type_label = tk.Label(self.frame, text='Shape Type:')
+        self.shape_type_label.grid(row=3, column=0, sticky=tk.W + tk.S)
+        self.shape_type = tk.StringVar(self.frame)
+        self.shape_type.set('Select Shape Type')
+        self.shape_type_menu = tk.OptionMenu(self.frame, self.shape_type, *SHAPE_TYPES)
+        self.shape_type_menu.grid(row=4, column=0, sticky=tk.W + tk.N)
 
         # control panel for image navigation
         self.ctrPanel = tk.Frame(self.frame)
@@ -104,14 +120,14 @@ class LabelTool:
         self.goBtn.pack(side=tk.LEFT)
 
         # example pannel for illustration
-        self.egPanel = tk.Frame(self.frame, border=10)
-        self.egPanel.grid(row=2, column=0, rowspan=5, sticky=tk.N)
-        self.tmpLabel2 = tk.Label(self.egPanel, text="")
-        self.tmpLabel2.pack(side=tk.TOP, pady=5)
-        self.egLabels = []
-        for i in range(3):
-            self.egLabels.append(tk.Label(self.egPanel))
-            self.egLabels[-1].pack(side=tk.TOP)
+        # self.egPanel = tk.Frame(self.frame, border=10)
+        # self.egPanel.grid(row=2, column=0, rowspan=5, sticky=tk.N)
+        # self.tmpLabel2 = tk.Label(self.egPanel, text="")
+        # self.tmpLabel2.pack(side=tk.TOP, pady=5)
+        # self.egLabels = []
+        # for i in range(3):
+        #     self.egLabels.append(tk.Label(self.egPanel))
+        #     self.egLabels[-1].pack(side=tk.TOP)
 
         # display mouse position
         self.disp = tk.Label(self.ctrPanel, text='')
@@ -119,6 +135,9 @@ class LabelTool:
 
         self.frame.columnconfigure(1, weight=1)
         self.frame.rowconfigure(4, weight=1)
+
+        print('initialized label tool')
+
 
     def load_img_dir(self, dbg=False):
         if not dbg:
@@ -169,39 +188,39 @@ class LabelTool:
 
         self.load_image()
 
-    # get the rectangle's four corners
-    def get_rect(self, x0, y0, x1, y1, x2, y2):
+    # # get the rectangle's four corners
+    # def get_rect(self, x0, y0, x1, y1, x2, y2):
+    #
+    #     w = m.sqrt(((x0 - x1) ** 2) + ((y0 - y1) ** 2))
+    #     h = m.sqrt(((x1 - x2) ** 2) + ((y1 - y2) ** 2))
+    #     m1 = self.slope(x1, y1, x2, y2)
+    #     m2 = self.slope(x0, y0, x1, y1)
+    #     if m1 == np.inf:
+    #         x3 = x0
+    #     elif m2 == np.inf:
+    #         x3 = x2
+    #     else:
+    #         x3 = ((y0 - m1 * x0) - (y2 - m2 * x2)) / -(m1 - m2)
+    #
+    #     if m1 == np.inf:
+    #         y3 = m2 * x3 + (y2 - m2 * x2)
+    #     else:
+    #         y3 = m1 * x3 + (y0 - m1 * x0)
+    #     corner_x = (x0 / 2, x1 / 2, x2 / 2, int(x3 / 2))
+    #     corner_y = (y0 / 2, y1 / 2, y2 / 2, int(y3 / 2))
+    #     return tuple(zip(corner_x, corner_y)), w, h
 
-        w = m.sqrt(((x0 - x1) ** 2) + ((y0 - y1) ** 2))
-        h = m.sqrt(((x1 - x2) ** 2) + ((y1 - y2) ** 2))
-        m1 = self.slope(x1, y1, x2, y2)
-        m2 = self.slope(x0, y0, x1, y1)
-        if m1 == np.inf:
-            x3 = x0
-        elif m2 == np.inf:
-            x3 = x2
-        else:
-            x3 = ((y0 - m1 * x0) - (y2 - m2 * x2)) / -(m1 - m2)
-
-        if m1 == np.inf:
-            y3 = m2 * x3 + (y2 - m2 * x2)
-        else:
-            y3 = m1 * x3 + (y0 - m1 * x0)
-        corner_x = (x0 / 2, x1 / 2, x2 / 2, int(x3 / 2))
-        corner_y = (y0 / 2, y1 / 2, y2 / 2, int(y3 / 2))
-        return tuple(zip(corner_x, corner_y)), w, h
-
-    # get the circle's four corners
-    # first two points define diameter, third one shifts in any direction
-    def get_circ(self, x0, y0, x1, y1, x2, y2):
-        r = m.sqrt(((x0 - x1) ** 2) + ((y0 - y1) ** 2)) / 2
-        center_x = (x0 + x1) / 2 + (x2 - x1)
-        center_y = (y0 + y1) / 2 + (y2 - y1)
-        return ((int((center_x - r) / 2), int((center_y - r) / 2)),
-                (int((center_x - r) / 2), int((center_y + r) / 2)),
-                (int((center_x + r) / 2), int((center_y + r) / 2)),
-                (int((center_x + r) / 2), int((center_y - r) / 2))),\
-            r * 2, r * 2
+    # # get the circle's four corners
+    # # first two points define diameter, third one shifts in any direction
+    # def get_circ(self, x0, y0, x1, y1, x2, y2):
+    #     r = m.sqrt(((x0 - x1) ** 2) + ((y0 - y1) ** 2)) / 2
+    #     center_x = (x0 + x1) / 2 + (x2 - x1)
+    #     center_y = (y0 + y1) / 2 + (y2 - y1)
+    #     return ((int((center_x - r) / 2), int((center_y - r) / 2)),
+    #             (int((center_x - r) / 2), int((center_y + r) / 2)),
+    #             (int((center_x + r) / 2), int((center_y + r) / 2)),
+    #             (int((center_x + r) / 2), int((center_y - r) / 2))),\
+    #         r * 2, r * 2
 
     def load_image(self):
         # load image
@@ -216,75 +235,126 @@ class LabelTool:
                                                     os.path.basename(self.imageList[self.total - 1])))
 
         # load labels
-        self.clear_bbox()
+        self.clear_shape()
         self.image_name = os.path.split(imagepath)[-1].split('.')[0]
         label_name = self.image_name + '.txt'
         print("label directory:" + self.outDir)
         self.label_filename = os.path.join(self.outDir, label_name)
         print("label save path:" + self.label_filename)
-        bbox_cnt = 0
+        shape_cnt = 0
         if os.path.exists(self.label_filename):
             with open(self.label_filename) as f:
                 for (i, line) in enumerate(f):
                     if i == 0:
-                        bbox_cnt = int(line.strip())
+                        shape_cnt = int(line.strip())
                         continue
-                    tmp = [float(t.strip()) for t in line.split()]
-                    # print tmp
-                    self.bboxList.append(tuple(tmp))
+                    split = line.split(' ')
+                    parsable = " ".join(split[1:])
+                    shape_type = split[0]
+                    if shape_type == 'POLY':
+                        tmp = shape.Polygon(i - 1, parse=parsable)
+                    elif shape_type == 'CIRC':
+                        tmp = shape.Circle(i - 1, parse=parsable)
+                    else:
+                        raise RuntimeError("unknown shape: " + shape_type)
 
-                    poly_tmp = list(tmp)
-                    tmp_id = self.mainPanel.create_oval(poly_tmp[0], poly_tmp[1], poly_tmp[4], poly_tmp[5],
-                                                        width=2,
-                                                        outline=COLORS[(len(self.bboxList) - 1) % len(COLORS)],
-                                                        fill='')
+                    # print tmp
+                    self.shapeList.append(tmp)
+
+                    tmp_id = tmp.create_shape(self.mainPanel, None)
+                    # tmp_id = self.mainPanel.create_oval(poly_tmp[0], poly_tmp[1], poly_tmp[4], poly_tmp[5],
+                    #                                     width=2,
+                    #                                     outline=COLORS[(len(self.bboxList) - 1) % len(COLORS)],
+                    #                                     fill='')
                     # print np.angle(angle,deg=True)
-                    self.bboxIdList.append(tmp_id)
-                    self.listbox.insert(tk.END,
-                                        '({}, {}),({}, {}),({}, {}),({}, {})'.format(*tmp))
-                    self.listbox.itemconfig(len(self.bboxIdList) - 1,
-                                            fg=COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
+                    self.shapeIdList.append(tmp_id)
+                    self.listbox.insert(tk.END, str(i - 1) + ': ' + tmp.to_string())
+                    # self.listbox.itemconfig(len(self.bboxIdList) - 1,
+                    #                         fg=COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
 
     def save_image(self):
         print("saving image in:" + self.label_filename)
         with open(self.label_filename, 'w') as f:
-            f.write('%d\n' % len(self.bboxList))
-            for bbox in self.bboxList:
-                f.write(' '.join(map(str, bbox)) + '\n')
+            f.write('%d\n' % len(self.shapeList))
+            for shp in self.shapeList:
+                # f.write(' '.join(map(str, shp)) + '\n')
+                f.write(shp.to_parsable() + '\n')
         print('Image No. %d saved' % self.cur)
 
-    def slope(self, x0, y0, x1, y1):
-        dx = x1 - x0
-        dy = y1 - y0
-        try:
-            return dy / dx
-        except ZeroDivisionError:
-            return np.inf  # cannot determine angle
+    # def slope(self, x0, y0, x1, y1):
+    #     dx = x1 - x0
+    #     dy = y1 - y0
+    #     try:
+    #         return dy / dx
+    #     except ZeroDivisionError:
+    #         return np.inf  # cannot determine angle
 
     def mouse_click(self, event):
         # print "click state:{}".format(self.STATE['click'])
 
-        if self.STATE['click'] == 0:
-            self.STATE['x0'], self.STATE['y0'] = event.x, event.y
+        if self.shape:
+            self.shape.handle_click([event.x, event.y])
+            if self.shape.defined:
+                self.del_shape_id(self.shapeId)
+                self.shapeIdList.append(self.shape.create_shape(self.mainPanel, None))
+                self.listbox.insert(tk.END, str(len(self.shapeList)) + ': ' + self.shape.to_string())
+                self.shapeList.append(self.shape)
+                self.shapeId = None
+                self.shape = None
+        else:
+            if self.selected_shape_idx != -1:
+                self.shapeList[self.selected_shape_idx].handle_click([event.x, event.y])
+                self.shapeList[self.selected_shape_idx].selected = False
+                self.del_shape_id(self.shapeIdList[self.selected_shape_idx])
+                self.shapeIdList[self.selected_shape_idx] = self.shapeList[self.selected_shape_idx].create_shape(
+                    self.mainPanel, [event.x, event.y])
+                self.listbox.delete(self.selected_shape_idx)
+                self.listbox.insert(self.selected_shape_idx, str(self.selected_shape_idx) + ': ' + self.shapeList[self.selected_shape_idx].to_string())
+                self.selected_shape_idx = -1
+            else:
+                closest_idx = -1
+                closest_dist = m.inf
+                for i, shp in enumerate(self.shapeList):
+                    dist = shape.Shape.dist(shp.location[0], shp.location[1], event.x, event.y)
+                    if dist < closest_dist:
+                        closest_idx = i
+                        closest_dist = dist
+                if closest_dist <= shape.SELECT_RADIUS:
+                    self.selected_shape_idx = closest_idx
+                    self.shapeList[closest_idx].selected = True
+                else:
+                    if self.shape_type.get() != 'Select Shape Type':
+                        new_shape_opts = {'Polygon': shape.Polygon(len(self.shapeList)),
+                                          'Circle' : shape.Circle(len(self.shapeList))}
+                        self.shape = new_shape_opts[self.shape_type.get()]
+                        self.shape.handle_click([event.x, event.y])
 
-        elif self.STATE['click'] == 1:
-            self.STATE['x1'], self.STATE['y1'] = event.x, event.y
+        # if self.STATE['click'] == 0:
+        #     self.STATE['x0'], self.STATE['y0'] = event.x, event.y
+        #
+        # elif self.STATE['click'] == 1:
+        #     self.STATE['x1'], self.STATE['y1'] = event.x, event.y
+        #
+        # elif self.STATE['click'] == 2:
+        #     x0, x1, x2 = self.STATE['x0'], self.STATE['x1'], event.x
+        #     y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
+        #     self.STATE['gR'] = list(self.get_circ(2 * x0, 2 * y0, 2 * x1, 2 * y1, 2 * x2, 2 * y2))
+        #     # print "Rectangle corner:",self.STATE['gR'][0]
+        #     self.bboxList.append(
+        #         [int(element) for tupl in self.STATE['gR'][0] for element in tupl])
+        #     self.bboxIdList.append(self.bboxId)
+        #     self.bboxId = None
+        #     self.listbox.insert(tk.END, '({}, {}),({}, {}),({}, {}),({}, {})'.format(
+        #         *[int(element) for tupl in self.STATE['gR'][0] for element in tupl]))
+        #     self.listbox.itemconfig(len(self.bboxIdList) - 1, fg=COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
+        #     self.STATE['click'] = -1
+        #
+        # self.STATE['click'] += 1
 
-        elif self.STATE['click'] == 2:
-            x0, x1, x2 = self.STATE['x0'], self.STATE['x1'], event.x
-            y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
-            self.STATE['gR'] = list(self.get_circ(2 * x0, 2 * y0, 2 * x1, 2 * y1, 2 * x2, 2 * y2))
-            # print "Rectangle corner:",self.STATE['gR'][0]
-            self.bboxList.append(
-                [int(element) for tupl in self.STATE['gR'][0] for element in tupl])
-            self.bboxIdList.append(self.bboxId)
-            self.bboxId = None
-            self.listbox.insert(tk.END, '({}, {}),({}, {}),({}, {}),({}, {})'.format(
-                *[int(element) for tupl in self.STATE['gR'][0] for element in tupl]))
-            self.listbox.itemconfig(len(self.bboxIdList) - 1, fg=COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
-            self.STATE['click'] = -1
-
-        self.STATE['click'] += 1
+    def del_shape_id(self, shape_id):
+        if shape_id:
+            for shp in shape_id:
+                self.mainPanel.delete(shp)
 
     def mouse_move(self, event):
         self.disp.config(text='x: %d, y: %d' % (event.x, event.y))
@@ -296,60 +366,66 @@ class LabelTool:
                 self.mainPanel.delete(self.vl)
             self.vl = self.mainPanel.create_line(event.x, 0, event.x, self.tkimg.height(), width=2)
 
-        if 1 == self.STATE['click']:
-            if self.bboxId:
-                self.mainPanel.delete(self.bboxId)
-            x0, x1 = self.STATE['x0'], event.x
-            y0, y1 = self.STATE['y0'], event.y
+        if self.shapeId:
+            self.del_shape_id(self.shapeId)
+        if self.shape:
+            self.shapeId = self.shape.create_shape(self.mainPanel, [event.x, event.y])
+        else:
+            if self.selected_shape_idx != -1:
+                self.del_shape_id(self.shapeIdList[self.selected_shape_idx])
+                self.shapeIdList[self.selected_shape_idx] = self.shapeList[self.selected_shape_idx].create_shape(self.mainPanel, [event.x, event.y])
 
-            # print self.STATE['gR']
-            circ = list(self.get_circ(x0 * 2, y0 * 2, x1 * 2, y1 * 2, x1 * 2, y1 * 2))
-            self.bboxId = self.mainPanel.create_oval(circ[0][0], circ[0][2],
-                                                     width=2,
-                                                     outline=COLORS[len(self.bboxList) % len(COLORS)],
-                                                     fill='')
+        # if 1 == self.STATE['click']:
+        #     if self.bboxId:
+        #         self.mainPanel.delete(self.bboxId)
+        #     x0, x1 = self.STATE['x0'], event.x
+        #     y0, y1 = self.STATE['y0'], event.y
+        #
+        #     # print self.STATE['gR']
+        #     circ = list(self.get_circ(x0 * 2, y0 * 2, x1 * 2, y1 * 2, x1 * 2, y1 * 2))
+        #     self.bboxId = self.mainPanel.create_oval(circ[0][0], circ[0][2],
+        #                                              width=2,
+        #                                              outline=COLORS[len(self.bboxList) % len(COLORS)],
+        #                                              fill='')
+        #
+        # if 2 == self.STATE['click']:
+        #     if self.bboxId:
+        #         self.mainPanel.delete(self.bboxId)
+        #
+        #     x0, x1, x2 = self.STATE['x0'], self.STATE['x1'], event.x
+        #     y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
+        #     global start
+        #     angle = np.rad2deg(np.arctan2(y1 - y0, x1 - x0))
+        #     self.STATE['gR'] = list(self.get_circ(x0 * 2, y0 * 2, x1 * 2, y1 * 2, x2 * 2, y2 * 2))
+        #     self.bboxId = self.mainPanel.create_oval(self.STATE['gR'][0][0], self.STATE['gR'][0][2],
+        #                                              width=2,
+        #                                              outline=COLORS[len(self.bboxList) % len(COLORS)],
+        #                                              fill='')
+        #     # print np.angle(angle,deg=True)
+        #     self.STATE['gR_deg'] = np.angle(angle, deg=True)
 
-        if 2 == self.STATE['click']:
-            if self.bboxId:
-                self.mainPanel.delete(self.bboxId)
+    def cancel_shape(self):
+        if self.shapeId:
+            self.del_shape_id(self.shapeId)
+            self.shapeId = None
+            self.shape = None
 
-            x0, x1, x2 = self.STATE['x0'], self.STATE['x1'], event.x
-            y0, y1, y2 = self.STATE['y0'], self.STATE['y1'], event.y
-            global start
-            angle = np.rad2deg(np.arctan2(y1 - y0, x1 - x0))
-            self.STATE['gR'] = list(self.get_circ(x0 * 2, y0 * 2, x1 * 2, y1 * 2, x2 * 2, y2 * 2))
-            self.bboxId = self.mainPanel.create_oval(self.STATE['gR'][0][0], self.STATE['gR'][0][2],
-                                                     width=2,
-                                                     outline=COLORS[len(self.bboxList) % len(COLORS)],
-                                                     fill='')
-            # print np.angle(angle,deg=True)
-            self.STATE['gR_deg'] = np.angle(angle, deg=True)
-
-    def cancel_bbox(self, event):
-        if 1 == self.STATE['click']:
-            if self.bboxId:
-                self.mainPanel.delete(self.bboxId)
-                self.bboxId = None
-                self.STATE['click'] = -1
-
-    def del_bbox(self):
+    def del_shape(self):
         sel = self.listbox.curselection()
         if len(sel) != 1:
             return
         idx = int(sel[0])
-        self.mainPanel.delete(self.bboxIdList[idx])
-        self.bboxIdList.pop(idx)
-        self.bboxList.pop(idx)
+        self.del_shape_id(self.shapeIdList[idx])
+        self.shapeIdList.pop(idx)
+        self.shapeList.pop(idx)
         self.listbox.delete(idx)
-        self.STATE['click'] = 0
 
-    def clear_bbox(self):
-        for idx in range(len(self.bboxIdList)):
-            self.mainPanel.delete(self.bboxIdList[idx])
-        self.listbox.delete(0, len(self.bboxList))
-        self.bboxIdList = []
-        self.bboxList = []
-        self.STATE['click'] = 0
+    def clear_shape(self):
+        for idx in range(len(self.shapeIdList)):
+            self.del_shape_id(self.shapeIdList[idx])
+        self.listbox.delete(0, len(self.shapeList))
+        self.shapeIdList = []
+        self.shapeList = []
 
     def prev_image(self, event=None):
         self.save_image()
