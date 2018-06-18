@@ -1,15 +1,10 @@
 from tkinter import Canvas
 import math as m
 
-SELECT_RADIUS = 8
-
-
 class Shape(object):
 
     # defines a blank shape or parses one from a given string
-    def __init__(self, index, *to_parse):
-        self.index = index
-        self.selected = False
+    def __init__(self, *to_parse):
         self.defined = False
         self.location = None
 
@@ -21,6 +16,14 @@ class Shape(object):
     def handle_click(self, loc):
         raise NotImplementedError('subclasses must override handle_click!')
 
+    # returns the approximated font size required for the given number in this shape
+    def get_approx_diam(self):
+        raise NotImplementedError('subclasses must override get_approx_diam!')
+
+    # changes the center of the shape
+    def set_center(self, loc):
+        raise NotImplementedError('subclasses must override set_center!')
+
     # returns the string representing this shape
     def to_string(self):
         raise NotImplementedError('subclasses must override to_string!')
@@ -29,6 +32,21 @@ class Shape(object):
     def to_parsable(self):
         raise NotImplementedError('subclasses must override to_parsable!')
 
+    # returns the approximated font size required for the given number in this shape
+    def get_font_size(self, idx):
+        approx_diam = self.get_approx_diam()
+        # 1 font size for every 2 pixels of diameter
+        # goes down by a factor of 2/3 for every new digit
+        est = int(1 / 2 * approx_diam * ((2 / 3) ** (len(str(idx)) - 1)))
+        if est > 16:
+            return 16
+        elif est < 4:
+            return 4
+        else:
+            return est
+
+
+    # returns the distance between two points
     @staticmethod
     def dist(x1, y1, x2, y2):
         return m.sqrt((x1 - x2)*(x1 - x2) + (y1 - y2)*(y1 - y2))
@@ -39,8 +57,8 @@ FINISH_RADIUS = 5
 
 class Polygon(Shape):
 
-    def __init__(self, index, parse=None):
-        super().__init__(index)
+    def __init__(self, parse=None):
+        super().__init__()
         self.points = []
         if parse:
             self.defined = True
@@ -52,33 +70,20 @@ class Polygon(Shape):
                     point = []
             self.location = self.get_center()
 
-    def create_shape(self, panel, mouse_loc):
-        shape = []
+    def create_shape(self, panel, mouse_loc, width=1, color='blue'):
         if not isinstance(panel, Canvas):
             raise RuntimeError('cannot draw to a non-Canvas object: ' + panel)
         if self.defined:
-            if self.selected and mouse_loc:
-                shifted_points = [[p[0] - self.location[0] + mouse_loc[0], p[1] - self.location[1] + mouse_loc[1]] for p in self.points]
-                shape.append(panel.create_polygon(shifted_points, width=2, outline='black', fill=''))
-                shape.append(panel.create_text(mouse_loc[0], mouse_loc[1], font=('Ariel', 12), text=str(self.index)))
-                shape.append(panel.create_oval(mouse_loc[0] - SELECT_RADIUS,
-                                               mouse_loc[1] - SELECT_RADIUS,
-                                               mouse_loc[0] + SELECT_RADIUS,
-                                               mouse_loc[1] + SELECT_RADIUS,
-                                               fill='',
-                                               outline='blue',
-                                               width=2))
-            elif not self.selected:
-                shape.append(panel.create_polygon(self.points, width=2, outline='black', fill=''))
-                shape.append(panel.create_text(self.location[0], self.location[1], font=('Ariel', 12), text=str(self.index)))
+            return [panel.create_polygon(self.points, width=width, outline=color, fill='')]
         else:
+            shape = []
             last = None
             for p in self.points:
                 if not (last is None):
-                    shape.append(panel.create_line(last[0], last[1], p[0], p[1], width=4))
+                    shape.append(panel.create_line(last[0], last[1], p[0], p[1], width=width, fill=color))
                 last = p
             if mouse_loc and self.points:
-                shape.append(panel.create_line(p[0], p[1], mouse_loc[0], mouse_loc[1], width=4))
+                shape.append(panel.create_line(p[0], p[1], mouse_loc[0], mouse_loc[1], width=width, fill=color))
                 if Shape.dist(self.points[0][0], self.points[0][1], mouse_loc[0], mouse_loc[1]) <= FINISH_RADIUS:
                     shape.append(panel.create_oval(self.points[0][0] - FINISH_RADIUS,
                                                    self.points[0][1] - FINISH_RADIUS,
@@ -87,27 +92,15 @@ class Polygon(Shape):
                                                    fill='',
                                                    outline='red',
                                                    width=2))
-        return shape
+            return shape
 
     def handle_click(self, loc):
-        if self.defined:
-            if self.selected:
-                for p in self.points:
-                    p[0] += loc[0] - self.location[0]
-                    p[1] += loc[1] - self.location[1]
-                self.location = loc
+        if not self.defined:
+            if 3 <= len(self.points) and Shape.dist(self.points[0][0], self.points[0][1], loc[0], loc[1]) <= FINISH_RADIUS:
+                self.location = self.get_center()
+                self.defined = True
             else:
-                raise RuntimeError('handle_click should not have been called')
-        else:
-            if not self.selected:
-                if self.points and \
-                        Shape.dist(self.points[0][0], self.points[0][1], loc[0], loc[1]) <= FINISH_RADIUS:
-                    self.location = self.get_center()
-                    self.defined = True
-                else:
-                    self.points.append(loc)
-            else:
-                raise RuntimeError('shape should not be selected if not already defined')
+                self.points.append(loc)
 
     def get_center(self):
         new_loc = [0, 0]
@@ -115,6 +108,26 @@ class Polygon(Shape):
             new_loc[0] += p[0]
             new_loc[1] += p[1]
         return [int(a / len(self.points)) for a in new_loc]
+
+    def get_approx_diam(self):
+        total_dist = 0
+        for p0 in self.points:
+            for p1 in self.points:
+                if p0 == p1:
+                    continue
+                total_dist += Shape.dist(p0[0], p0[1], p1[0], p1[1])
+        num_points = len(self.points)
+        average_dist = 2 * total_dist / (num_points * (num_points - 1))
+        approx_diam = average_dist * m.pi / 2
+        # this approximation is less accurate for low vertex shapes
+        # so we scale it down by (1 - e^(-num_points))
+        return approx_diam * (1 - (m.e ** (-num_points/6)))
+
+    def set_center(self, loc):
+        for p in self.points:
+            p[0] += loc[0] - self.location[0]
+            p[1] += loc[1] - self.location[1]
+        self.location = loc
 
     def to_string(self):
         s = 'POLY - points={'
@@ -133,8 +146,8 @@ class Polygon(Shape):
 
 class Circle(Shape):
 
-    def __init__(self, index, parse=None):
-        super().__init__(index)
+    def __init__(self, parse=None):
+        super().__init__()
         self.start = None
         if parse:
             self.defined = True
@@ -142,44 +155,27 @@ class Circle(Shape):
             self.location = [int(splt[0]), int(splt[1])]
             self.radius = int(splt[2])
 
-    def create_shape(self, panel, mouse_loc):
-        shape = []
+    def create_shape(self, panel, mouse_loc, width=1, color='blue'):
         if not isinstance(panel, Canvas):
             raise RuntimeError('cannot draw to a non-Canvas object: ' + panel)
         if self.defined:
-            if self.selected and mouse_loc:
-                shape.append(panel.create_oval(mouse_loc[0] - self.radius,
-                                               mouse_loc[1] - self.radius,
-                                               mouse_loc[0] + self.radius,
-                                               mouse_loc[1] + self.radius,
-                                               fill='',
-                                               width=2))
-                shape.append(panel.create_text(mouse_loc[0], mouse_loc[1], font=('Ariel', 12), text=str(self.index)))
-                shape.append(panel.create_oval(mouse_loc[0] - SELECT_RADIUS,
-                                               mouse_loc[1] - SELECT_RADIUS,
-                                               mouse_loc[0] + SELECT_RADIUS,
-                                               mouse_loc[1] + SELECT_RADIUS,
-                                               fill='',
-                                               outline='blue',
-                                               width=2))
-            elif not self.selected:
-                shape.append(panel.create_oval(self.location[0] - self.radius,
+            return [panel.create_oval(self.location[0] - self.radius,
                                                self.location[1] - self.radius,
                                                self.location[0] + self.radius,
                                                self.location[1] + self.radius,
                                                fill='',
-                                               width=2))
-                shape.append(panel.create_text(self.location[0], self.location[1], font=('Ariel', 12), text=str(self.index)))
+                                               outline=color,
+                                               width=width),]
         else:
             if mouse_loc and self.start:
                 circ = Circle.get_circ(self.start[0], self.start[1], mouse_loc[0], mouse_loc[1])
-                shape.append(panel.create_oval(circ[0] - circ[2],
+                return [panel.create_oval(circ[0] - circ[2],
                                                circ[1] - circ[2],
                                                circ[0] + circ[2],
                                                circ[1] + circ[2],
                                                fill='',
-                                               width=4))
-        return shape
+                                               outline=color,
+                                               width=width),]
 
     @staticmethod
     def get_circ(x0, y0, x1, y1):
@@ -189,31 +185,21 @@ class Circle(Shape):
         return [int(center_x), int(center_y), int(rad)]
 
     def handle_click(self, loc):
-        if self.defined:
-            if self.selected:
-                self.location[0] = loc[0]
-                self.location[1] = loc[1]
+        if not self.defined:
+            if self.start:
+                circ = Circle.get_circ(self.start[0], self.start[1], loc[0], loc[1])
+                self.location = [circ[0], circ[1]]
+                self.radius = circ[2]
+                self.start = None
+                self.defined = True
             else:
-                raise RuntimeError('handle_click should not have been called')
-        else:
-            if not self.selected:
-                if self.start:
-                    circ = Circle.get_circ(self.start[0], self.start[1], loc[0], loc[1])
-                    self.location = [circ[0], circ[1]]
-                    self.radius = circ[2]
-                    self.start = None
-                    self.defined = True
-                else:
-                    self.start = loc
-            else:
-                raise RuntimeError('shape should not be selected if not already defined')
+                self.start = loc
 
-    def get_center(self):
-        new_loc = [0, 0]
-        for p in self.points:
-            new_loc[0] += p[0]
-            new_loc[1] += p[1]
-        return [int(a / len(self.points)) for a in new_loc]
+    def get_approx_diam(self):
+        return self.radius * 2
+
+    def set_center(self, loc):
+        self.location = loc
 
     def to_string(self):
         return 'CIRC - center=(' + str(self.location[0]) + ',' + str(self.location[1]) + '), radius=' + str(self.radius)
