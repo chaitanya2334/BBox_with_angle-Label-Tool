@@ -42,8 +42,8 @@ class LabelTool:
 
         # initialize mouse state
         self.shapeIdList = []
-        self.shapeId = None
         self.shapeList = []
+        self.shapeId = None
         self.shape = None
         self.selected_shape_idx = -1
         self.dragging = False
@@ -206,6 +206,13 @@ class LabelTool:
         self.mainPanel.create_image(0, 0, image=self.tkimg, anchor=tk.NW)
         self.progLabel.config(text="{0}/{1}".format(os.path.basename(self.imageList[self.cur - 1]),
                                                     os.path.basename(self.imageList[self.total - 1])))
+
+
+        # reset mouse state
+        self.shapeId = None
+        self.shape = None
+        self.selected_shape_idx = -1
+        self.dragging = False
 
         # load labels
         self.clear_shape()
@@ -389,8 +396,6 @@ class LabelTool:
         self.listbox.delete(0, len(self.shapeList))
         self.shapeIdList = []
         self.shapeList = []
-        if self.label_filename:
-            self.save_image()
 
     def prev_image(self, event=None):
         self.save_image()
